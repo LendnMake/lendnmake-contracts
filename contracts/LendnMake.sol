@@ -532,21 +532,21 @@ contract LendnMake {
         _;
     }
     
-    function LendnMake(uint256 _tokenId, uint256 _desiredAmt, uint256 _marketPrice, uint256 _desiredRate, uint256 _desiredPeriod) {
+    function LendnMake(uint256 _tokenId, uint256 _desiredAmt, uint256 _marketPrice, uint256 _desiredRate, uint256 _bidCountAllowed, uint256 _desiredPeriod) {
         owner = msg.sender;    
         asset_ = _tokenId;
         marketPrice_ = _marketPrice;
         floorAmt_ = _desiredAmt;
         ceilAmt_ = _marketPrice - (3*(_marketPrice))/10;
         rate_ = _desiredRate;
+        bidCountLimit = _bidCountAllowed;
         period_ = _desiredPeriod;
         deadline = now + 3600*period_;
-        lockAsset();
     }
     
     function Bid2Lend(uint256 _bidAmt) {
         require(msg.sender!=borrower && assetLocked==true);
-        if(bidLiveStatus==true && _bidAmt > bestBid && _bidAmt < ceilAmt_) {
+        if((bidLiveStatus==true) && (_bidAmt > bestBid) && (_bidAmt < ceilAmt_) && (_bidAmt > floorAmt_)) {
             bestBid = _bidAmt;
             potentialLender = msg.sender;
             bidCallCounter = bidCallCounter + 1;
@@ -561,7 +561,7 @@ contract LendnMake {
         require(assetLocked==true);
         DaiContract daic = DaiContract(daiAddress);
         daic.transfer(borrower, bestBid);
-        loanBalance = bestBid;
+        loanBalance = bestBid + (bestBid*rate_)/100;
         owner = lender;
     }
     
@@ -573,9 +573,9 @@ contract LendnMake {
         dxlAddress = _DXLAddress;
     }
     
-    function lockAsset() internal returns(bool) {
+    function lockAsset() public returns(bool) {
         DXLT dxlt = DXLT(dxlAddress);
-        dxlt.safeTransferFrom(borrower, address(this), asset_);
+        dxlt.safeTransferFrom(msg.sender, this, asset_);
         assetLocked = true;
         return true;
     }
@@ -611,12 +611,14 @@ contract LendnMake {
     function unlock2Borrower() internal returns(bool) {
         DXLT dxlt = DXLT(dxlAddress);
         dxlt.safeTransferFrom(address(this), borrower, asset_);
+        assetLocked = false;
         return true;
     }
     
     function unlock2Lender() internal returns(bool) {
         DXLT dxlt = DXLT(dxlAddress);
         dxlt.safeTransferFrom(address(this), lender, asset_);
+        assetLocked = false;
         return true;
     }
     
